@@ -168,17 +168,39 @@
     border-color: var(--color-border);
   }
 
+  /* Editorial list row: the outline numeral fills with brass on hover/focus. */
+  .numeral-row .numeral {
+    color: transparent;
+    -webkit-text-stroke: 1px rgba(200, 162, 75, 0.3);
+    transition:
+      -webkit-text-stroke-color var(--duration-base) var(--ease-out),
+      color var(--duration-base) var(--ease-out);
+  }
+
+  .numeral-row:hover .numeral,
+  .numeral-row:focus-within .numeral {
+    -webkit-text-stroke-color: var(--color-accent);
+  }
+
   .card {
     background-color: var(--color-surface);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
   }
 
-  /* Film grain / editorial texture (CSS-only, no assets). */
+  /* Film grain / editorial texture (CSS-only, no assets).
+     `.grain` MUST be a positioning context or the overlay anchors to the
+     nearest positioned ancestor instead of the textured element. */
+  .grain {
+    position: relative;
+    isolation: isolate;
+  }
+
   .grain::after {
     content: "";
     position: absolute;
     inset: 0;
+    z-index: 1;
     pointer-events: none;
     opacity: 0.06;
     mix-blend-mode: overlay;
@@ -207,9 +229,42 @@
 /* Utilities                                                          */
 /* ------------------------------------------------------------------ */
 @layer utilities {
+  /* Container-relative so the SAME template hero scales correctly inside the
+     landing's phone preview. The first declaration is the `vw` fallback for
+     engines without container query units. */
   .display-fluid {
     font-size: clamp(2.25rem, 9vw, 5.5rem);
-    line-height: 0.98;
+    font-size: clamp(2.25rem, 9cqw, 5.5rem);
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+  }
+
+  .hero-pad {
+    padding-inline: clamp(1.25rem, 5vw, 3rem);
+    padding-inline: clamp(1.25rem, 5cqw, 3rem);
+  }
+
+  .days-number {
+    font-size: clamp(3rem, 16vw, 7rem);
+    font-size: clamp(3rem, 16cqw, 7rem);
+  }
+
+  /* Landing hero — pushed deliberately bigger and tighter than the template. */
+  .display-hero {
+    font-size: clamp(2.75rem, 11.5vw, 7rem);
+    line-height: 0.88;
+    letter-spacing: -0.035em;
+  }
+
+  /* Oversized OUTLINE numerals used as structural ornament. */
+  .text-outline {
+    color: transparent;
+    -webkit-text-stroke: 1.5px rgba(200, 162, 75, 0.4);
+  }
+
+  .text-outline-soft {
+    color: transparent;
+    -webkit-text-stroke: 1px rgba(200, 162, 75, 0.22);
   }
 
   .text-muted {
@@ -237,6 +292,55 @@
   .gate-fade.is-hidden {
     opacity: 0;
     pointer-events: none;
+  }
+
+  /* Query container for the phone preview: children using `cqw` (the shared
+     template hero) scale against the 390 px device width, not the viewport. */
+  .preview-screen {
+    container-type: inline-size;
+  }
+
+  /* Shimmer sweep across the primary CTA. Purely decorative. */
+  .btn-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      105deg,
+      transparent 32%,
+      rgba(255, 255, 255, 0.5) 50%,
+      transparent 68%
+    );
+    transform: translateX(-140%);
+    animation: latido-shimmer 4.6s var(--ease-out) infinite;
+  }
+
+  @keyframes latido-shimmer {
+    0%,
+    58% {
+      transform: translateX(-140%);
+    }
+    88%,
+    100% {
+      transform: translateX(140%);
+    }
+  }
+
+  /* Receipt-style perforation. */
+  .perforation {
+    background-image: linear-gradient(
+      90deg,
+      var(--color-border) 0 6px,
+      transparent 6px 12px
+    );
+    background-size: 12px 1px;
+    background-repeat: repeat-x;
   }
 }
 

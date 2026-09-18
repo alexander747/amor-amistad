@@ -1,46 +1,22 @@
 'use client'
 
 import Image from 'next/image'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ScratchGate from '@/components/ScratchGate'
 import ShareCard from '@/components/ShareCard'
 import { trackEvent } from '@/lib/analytics-client'
-import { daysTogether, formatLongDate, formatNumber } from '@/lib/dates'
+import { daysTogether, formatLongDate } from '@/lib/dates'
 import { getBrandName, getCheckoutUrl } from '@/lib/env'
 import type { PageData } from '@/lib/types'
 import Gallery from './Gallery'
+import LetterHero from './LetterHero'
 import Messages from './Messages'
 import RevealOnScroll from './RevealOnScroll'
+import { useCountUp } from './useCountUp'
 import YouTubeEmbed from './YouTubeEmbed'
 
 type MidnightLetterProps = {
   data: PageData
-}
-
-function useCountUp(target: number, enabled: boolean): number {
-  const [value, setValue] = useState(enabled ? 0 : target)
-  const frameRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    if (!enabled) {
-      setValue(target)
-      return
-    }
-    const duration = 1400
-    const start = performance.now()
-    const tick = (now: number) => {
-      const progress = Math.min(1, (now - start) / duration)
-      const eased = 1 - Math.pow(1 - progress, 3)
-      setValue(Math.round(target * eased))
-      if (progress < 1) frameRef.current = requestAnimationFrame(tick)
-    }
-    frameRef.current = requestAnimationFrame(tick)
-    return () => {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current)
-    }
-  }, [enabled, target])
-
-  return value
 }
 
 function coupleLabel(names: PageData['page']['couple_names']): string {
@@ -107,44 +83,13 @@ export default function MidnightLetter({ data }: MidnightLetterProps) {
         className="snap-track grain relative min-h-[100dvh] overflow-hidden bg-[var(--color-bg)]"
         aria-hidden={!revealed}
       >
-        {/* Beat 1 — Hero */}
-        <section className="story-beat px-[clamp(1.25rem,5vw,3rem)]">
-          <div className="mx-auto w-full max-w-3xl">
-            <p className="eyebrow mb-6">Para {names}</p>
-            <h1 className="display-fluid font-display text-[var(--color-paper)]">
-              {names}
-            </h1>
-            {dateLabel && (
-              <p className="mt-6 font-mono text-xs uppercase tracking-[0.28em] text-[var(--color-text-muted)]">
-                Juntos desde el {dateLabel}
-              </p>
-            )}
-            {days !== null && (
-              <div className="mt-10 flex items-end gap-4 border-t border-[var(--color-border)] pt-8">
-                <span
-                  className="font-display text-[clamp(3rem,16vw,7rem)] leading-none text-[var(--color-accent)]"
-                  aria-hidden="true"
-                >
-                  {formatNumber(countDays)}
-                </span>
-                <span className="pb-3 font-mono text-xs uppercase tracking-[0.24em] text-[var(--color-text-muted)]">
-                  días
-                  <br />
-                  juntos
-                </span>
-                <span className="sr-only">
-                  {formatNumber(days)} días juntos
-                </span>
-              </div>
-            )}
-          </div>
-          <div
-            aria-hidden="true"
-            className="absolute bottom-8 left-1/2 -translate-x-1/2 font-mono text-[10px] uppercase tracking-[0.3em] text-[var(--color-text-muted)]"
-          >
-            Desliza ↓
-          </div>
-        </section>
+        {/* Beat 1 — Hero (shared with the landing preview) */}
+        <LetterHero
+          names={names}
+          dateLabel={dateLabel}
+          days={days}
+          countDays={countDays}
+        />
 
         {/* Beat 2 — Gallery */}
         <Gallery photos={photos} />

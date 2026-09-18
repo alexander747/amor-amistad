@@ -1,5 +1,7 @@
 export { default as MidnightLetter } from './MidnightLetter'
+export { default as LetterHero } from './LetterHero'
 export { default as Gallery } from './Gallery'
 export { default as Messages } from './Messages'
 export { default as YouTubeEmbed } from './YouTubeEmbed'
 export { default as RevealOnScroll } from './RevealOnScroll'
+export { useCountUp } from './useCountUp'
