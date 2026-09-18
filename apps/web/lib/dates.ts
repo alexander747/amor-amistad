@@ -1,7 +1,13 @@
 const MS_PER_DAY = 86_400_000
 
-export function parseDateOnly(value: string | null | undefined): Date | null {
+export function parseDateOnly(value: string | Date | null | undefined): Date | null {
   if (!value) return null
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null
+    // `pg` devuelve las columnas DATE como Date a medianoche LOCAL. Usar los
+    // getters locales evita el corrimiento de un día por zona horaria.
+    return new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate()))
+  }
   const parsed = new Date(`${value}T00:00:00Z`)
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
@@ -10,7 +16,7 @@ export function parseDateOnly(value: string | null | undefined): Date | null {
  * Días juntos desde la fecha de aniversario. Si la fecha es futura devuelve 0.
  */
 export function daysTogether(
-  anniversary: string | null | undefined,
+  anniversary: string | Date | null | undefined,
   now: Date = new Date(),
 ): number | null {
   const start = parseDateOnly(anniversary)
@@ -26,7 +32,7 @@ const DATE_FORMATTER = new Intl.DateTimeFormat('es-CO', {
   timeZone: 'UTC',
 })
 
-export function formatLongDate(value: string | null | undefined): string | null {
+export function formatLongDate(value: string | Date | null | undefined): string | null {
   const date = parseDateOnly(value)
   return date ? DATE_FORMATTER.format(date) : null
 }

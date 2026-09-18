@@ -40,7 +40,10 @@ export async function getPageBySlug(
   db: Queryable = getPool(),
 ): Promise<PageData | null> {
   const pageResult = await db.query<PageRecord>(
-    `SELECT id, order_id, slug, template_slug, couple_names, anniversary_date,
+    // `anniversary_date::text` devuelve 'YYYY-MM-DD' (string) en vez de un
+    // objeto Date: evita el corrimiento de un día por zona horaria al calcular
+    // los "días juntos". Ver lib/dates.ts y la lección de pos-final.
+    `SELECT id, order_id, slug, template_slug, anniversary_date::text AS anniversary_date,
             youtube_url, theme, published_at, expires_at, created_at
        FROM pages
       WHERE slug = $1
