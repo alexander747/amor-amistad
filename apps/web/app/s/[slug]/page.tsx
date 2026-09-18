@@ -44,7 +44,7 @@ export async function generateMetadata({ params }: RouteParams): Promise<Metadat
 
   if (!isPublishedAndFresh(data)) {
     return {
-      title: `Sorpresa no encontrada · ${brand}`,
+      title: { absolute: `Sorpresa no encontrada · ${brand}` },
       robots: { index: false, follow: false, nocache: true },
     }
   }
@@ -56,7 +56,8 @@ export async function generateMetadata({ params }: RouteParams): Promise<Metadat
     : `${names}: una página sorpresa hecha con ${brand}.`
 
   return {
-    title: `${names} · Una sorpresa de ${brand}`,
+    // `absolute` evita que el template del layout agregue "· Latido" de nuevo.
+    title: { absolute: `${names} · Una sorpresa de ${brand}` },
     description,
     robots: {
       index: false,
