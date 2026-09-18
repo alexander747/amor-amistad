@@ -22,7 +22,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\nconst crypto = require('crypto');\n\nconst input = $input.first().json;\nconst headers = input.headers || {};\nconst query = input.query || {};\nconst body = input.body || input;\n\n// Mercado Pago sends data.id in the notification query string and, for newer\n// webhooks, also in the body. Prefer the query value (that is what the\n// signature manifest is built from).\nconst dataId = query['data.id'] || (body.data && body.data.id) || body.id;\nconst requestId = headers['x-request-id'] || '';\nconst signatureHeader = headers['x-signature'] || '';\n\nif (!dataId) {\n  throw new Error('MP webhook: missing data.id');\n}\n\n// x-signature format: \"ts=1704908010,v1=618c85...\"\nconst parts = {};\nfor (const chunk of String(signatureHeader).split(',')) {\n  const idx = chunk.indexOf('=');\n  if (idx > -1) parts[chunk.slice(0, idx).trim()] = chunk.slice(idx + 1).trim();\n}\nconst ts = parts.ts;\nconst v1 = parts.v1;\nif (!ts || !v1) {\n  throw new Error('MP webhook: missing ts/v1 in x-signature');\n}\n\nconst secret = $env.MP_WEBHOOK_SECRET;\nif (!secret) {\n  throw new Error('MP_WEBHOOK_SECRET env var is not set');\n}\n\n// TODO(verify): manifest template per Mercado Pago docs:\n//   id:[data.id];request-id:[x-request-id];ts:[ts];\n// Re-check against the current MP webhook signature docs before going live.\nconst manifest = 'id:' + String(dataId) + ';request-id:' + requestId + ';ts:' + ts + ';';\nconst hmac = crypto.createHmac('sha256', secret).update(manifest).digest('hex');\nif (hmac !== v1) {\n  throw new Error('MP webhook: invalid x-signature');\n}\n\n// Order code: LAT-XXXXXX (base32, no ambiguous characters).\n// Generated here so downstream nodes (email) can reuse it.\nconst alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';\nlet suffix = '';\nfor (const byte of crypto.randomBytes(6)) {\n  suffix += alphabet[byte % alphabet.length];\n}\n\nreturn [{ json: { valid: true, paymentId: String(dataId), requestId, ts, orderCode: 'LAT-' + suffix } }];\n"
+        "jsCode": "\nconst crypto = require('crypto');\n\nconst input = $input.first().json;\nconst headers = input.headers || {};\nconst query = input.query || {};\nconst body = input.body || input;\n\n// Orders API (Checkout Pro): la notificacion llega con topic `orders_v2`,\n// type `order`, y data.id = id de la ORDEN (query param y body).\nconst dataId = query['data.id'] || (body.data && body.data.id) || body.id;\nconst requestId = headers['x-request-id'] || '';\nconst signatureHeader = headers['x-signature'] || '';\n\nif (!dataId) {\n  throw new Error('MP webhook: missing data.id');\n}\n\n// x-signature format: \"ts=1704908010,v1=618c85...\"\nconst parts = {};\nfor (const chunk of String(signatureHeader).split(',')) {\n  const idx = chunk.indexOf('=');\n  if (idx > -1) parts[chunk.slice(0, idx).trim()] = chunk.slice(idx + 1).trim();\n}\nconst ts = parts.ts;\nconst v1 = parts.v1;\nif (!ts || !v1) {\n  throw new Error('MP webhook: missing ts/v1 in x-signature');\n}\n\nconst secret = $env.MP_WEBHOOK_SECRET;\nif (!secret) {\n  throw new Error('MP_WEBHOOK_SECRET env var is not set');\n}\n\n// TODO(verify): manifest template per Mercado Pago docs:\n//   id:[data.id];request-id:[x-request-id];ts:[ts];  (id en minusculas)\n// Orders API: el id de la orden (ej. ORD01JQ...) debe ir en MINUSCULAS en el\n// manifiesto, o la firma nunca coincide. Verificado en la doc de MP (Orders API).\nconst manifestId = String(dataId).toLowerCase();\nconst manifest = 'id:' + manifestId + ';request-id:' + requestId + ';ts:' + ts + ';';\nconst hmac = crypto.createHmac('sha256', secret).update(manifest).digest('hex');\nif (hmac !== v1) {\n  throw new Error('MP webhook: invalid x-signature');\n}\n\n// Order code: LAT-XXXXXX (base32, no ambiguous characters).\n// Generated here so downstream nodes (email) can reuse it.\nconst alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';\nlet suffix = '';\nfor (const byte of crypto.randomBytes(6)) {\n  suffix += alphabet[byte % alphabet.length];\n}\n\nreturn [{ json: { valid: true, paymentId: String(dataId), requestId, ts, orderCode: 'LAT-' + suffix } }];\n"
       },
       "id": "cb424834-4998-4169-83b1-760913c9c464",
       "name": "Validate MP Signature",
@@ -96,10 +96,11 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.mercadopago.com/v1/payments/{{ $('Validate MP Signature').item.json.paymentId }}",
+        "url": "=https://api.mercadopago.com/v1/orders/{{ $('Validate MP Signature').item.json.paymentId }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
-        "options": {}
+        "options": {},
+        "notes": "Orders API: GET /v1/orders/{id} con Header Auth (Bearer Access Token)."
       },
       "id": "168593b3-a87a-4ff3-b26d-cb1a61941423",
       "name": "Get MP Payment",
@@ -123,14 +124,23 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict",
+            "typeValidation": "loose",
             "version": 2
           },
           "conditions": [
             {
-              "id": "a082a711-5052-45c6-831d-0202927a8ee4",
+              "id": "669cdb08-e735-4c0b-a6ee-a800d101b40c",
               "leftValue": "={{ $json.status }}",
-              "rightValue": "approved",
+              "rightValue": "processed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "5db4161f-7ef1-413d-bb90-d638920da37a",
+              "leftValue": "={{ $json.status_detail }}",
+              "rightValue": "accredited",
               "operator": {
                 "type": "string",
                 "operation": "equals"
@@ -139,7 +149,8 @@
           ],
           "combinator": "and"
         },
-        "options": {}
+        "options": {},
+        "notes": "Aprobado = status \"processed\" Y status_detail \"accredited\". Ojo: processed+refunded tambien es processed pero NO es un pago valido."
       },
       "id": "a3e55be2-206e-4d6b-a402-dec9957797ad",
       "name": "Payment Approved?",
