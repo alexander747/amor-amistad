@@ -53,7 +53,7 @@
       "alwaysOutputData": true,
       "credentials": {
         "postgres": {
-          "id": "REPLACE_POSTGRES_CRED_ID",
+          "id": "XwvJlleNNP4iWjFa",
           "name": "Latido Postgres"
         }
       },
@@ -168,7 +168,7 @@
       ],
       "credentials": {
         "postgres": {
-          "id": "REPLACE_POSTGRES_CRED_ID",
+          "id": "XwvJlleNNP4iWjFa",
           "name": "Latido Postgres"
         }
       },
@@ -193,7 +193,7 @@
       "alwaysOutputData": true,
       "credentials": {
         "postgres": {
-          "id": "REPLACE_POSTGRES_CRED_ID",
+          "id": "XwvJlleNNP4iWjFa",
           "name": "Latido Postgres"
         }
       },
@@ -218,7 +218,7 @@
       ],
       "credentials": {
         "smtp": {
-          "id": "REPLACE_SMTP_CRED_ID",
+          "id": "6eBST20ucQSn4CX5",
           "name": "Latido SMTP"
         }
       },
