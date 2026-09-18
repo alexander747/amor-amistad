@@ -211,17 +211,19 @@
     background-size: 4px 4px;
   }
 
+  /* Beats size to their content so the story flows instead of stacking empty
+     screens. Only the hero (and the closing, when it wants it) opts into a full
+     viewport via `.story-beat-full`. */
   .story-beat {
-    min-height: 100dvh;
+    position: relative;
+    scroll-snap-align: start;
+  }
+
+  .story-beat-full {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    scroll-snap-align: start;
-    position: relative;
-  }
-
-  .snap-track {
-    scroll-snap-type: y proximity;
+    min-height: 100dvh;
   }
 }
 
@@ -283,6 +285,46 @@
   .reveal-up.is-visible {
     opacity: 1;
     transform: none;
+  }
+
+  /* Editorial photo reveal: the card lands with a small tilt of its own
+     (`--tilt` keeps the resting rotation once it has arrived). */
+  .reveal-tilt {
+    opacity: 0;
+    transform: translateY(30px) rotate(calc(var(--tilt, 0deg) - 2.5deg)) scale(0.96);
+    transition:
+      opacity var(--duration-slow) var(--ease-out),
+      transform var(--duration-slow) var(--ease-out);
+    will-change: opacity, transform;
+  }
+
+  .reveal-tilt.is-visible {
+    opacity: 1;
+    transform: rotate(var(--tilt, 0deg)) scale(1);
+  }
+
+  .reveal-scale {
+    opacity: 0;
+    transform: translateY(18px) scale(0.94);
+    transition:
+      opacity var(--duration-slow) var(--ease-out),
+      transform var(--duration-slow) var(--ease-out);
+    will-change: opacity, transform;
+  }
+
+  .reveal-scale.is-visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Horizontal film strip keeps its own scroll; the page never gains an x-axis
+     scrollbar because the track is clipped by its own overflow. */
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 
   .gate-fade {
@@ -361,8 +403,20 @@
     scroll-behavior: auto !important;
   }
 
-  .reveal-up {
+  .reveal-up,
+  .reveal-tilt,
+  .reveal-scale {
     opacity: 1;
-    transform: none;
+    transform: rotate(var(--tilt, 0deg));
+  }
+
+  /* Scroll-linked transforms are set inline by Motion; `!important` wins over
+     inline styles so parallax and the progress bar stay still. */
+  [data-parallax] {
+    transform: none !important;
+  }
+
+  [data-scroll-progress] {
+    display: none;
   }
 }

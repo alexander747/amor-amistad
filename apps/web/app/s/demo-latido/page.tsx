@@ -21,7 +21,7 @@ const DEMO_DATA: PageData = {
     template_slug: 'midnight-letter',
     couple_names: { a: 'Mariana', b: 'Julián' },
     anniversary_date: '2021-03-14',
-    youtube_url: null,
+    youtube_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     theme: {},
     published_at: '2026-01-01T00:00:00.000Z',
     expires_at: null,
@@ -47,7 +47,29 @@ const DEMO_DATA: PageData = {
       origin: 'client',
     },
   ],
-  photos: [],
+  photos: [
+    {
+      id: 'demo-p1',
+      url: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+      r2_key: 'demo/1',
+      position: 0,
+      alt: 'Tarde de café en el centro',
+    },
+    {
+      id: 'demo-p2',
+      url: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+      r2_key: 'demo/2',
+      position: 1,
+      alt: 'Primer viaje juntos',
+    },
+    {
+      id: 'demo-p3',
+      url: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+      r2_key: 'demo/3',
+      position: 2,
+      alt: 'Domingo sin planes',
+    },
+  ],
 }
 
 export default function DemoLatidoPage() {

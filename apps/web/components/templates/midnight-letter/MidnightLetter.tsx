@@ -1,13 +1,14 @@
 'use client'
 
 import Image from 'next/image'
+import { motion, useScroll, useSpring } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
 import ScratchGate from '@/components/ScratchGate'
-import ShareCard from '@/components/ShareCard'
 import { trackEvent } from '@/lib/analytics-client'
 import { daysTogether, formatLongDate } from '@/lib/dates'
 import { getBrandName, getCheckoutUrl } from '@/lib/env'
 import type { PageData } from '@/lib/types'
+import Closing from './Closing'
 import Gallery from './Gallery'
 import LetterHero from './LetterHero'
 import Messages from './Messages'
@@ -27,12 +28,33 @@ function coupleLabel(names: PageData['page']['couple_names']): string {
   return parts.join(' & ')
 }
 
+/** Thin brass line that tracks how far into the story we are. Decorative. */
+function ScrollProgress() {
+  const { scrollYProgress } = useScroll()
+  const scaleX = useSpring(scrollYProgress, {
+    stiffness: 140,
+    damping: 26,
+    mass: 0.4,
+  })
+
+  return (
+    <motion.div
+      aria-hidden="true"
+      data-scroll-progress
+      style={{ scaleX }}
+      className="fixed inset-x-0 top-0 z-30 h-[2px] origin-left bg-[var(--color-accent)] opacity-70"
+    />
+  )
+}
+
 export default function MidnightLetter({ data }: MidnightLetterProps) {
   const { page, messages, photos } = data
   const [revealed, setRevealed] = useState(false)
   const [animateCounter, setAnimateCounter] = useState(false)
   const slug = page.slug
   const names = coupleLabel(page.couple_names)
+  const brand = getBrandName()
+  const checkoutUrl = getCheckoutUrl()
   const days = useMemo(
     () => daysTogether(page.anniversary_date),
     [page.anniversary_date],
@@ -79,11 +101,13 @@ export default function MidnightLetter({ data }: MidnightLetterProps) {
         />
       )}
 
+      <ScrollProgress />
+
       <main
-        className="snap-track grain relative min-h-[100dvh] overflow-hidden bg-[var(--color-bg)]"
+        className="grain relative min-h-[100dvh] overflow-hidden bg-[var(--color-bg)]"
         aria-hidden={!revealed}
       >
-        {/* Beat 1 — Hero (shared with the landing preview) */}
+        {/* Beat 1 — Hero (full viewport; shared with the landing preview) */}
         <LetterHero
           names={names}
           dateLabel={dateLabel}
@@ -91,75 +115,42 @@ export default function MidnightLetter({ data }: MidnightLetterProps) {
           countDays={countDays}
         />
 
-        {/* Beat 2 — Gallery */}
+        {/* Beat 2 — Gallery (photos are the protagonist) */}
         <Gallery photos={photos} />
 
         {/* Beat 3 — Messages */}
         <Messages messages={messages} />
 
-        {/* Beat 4 — Video */}
+        {/* Beat 4 — Video (proportional to the player, not full screen) */}
         {page.youtube_url && (
-          <section aria-labelledby="video-titulo" className="story-beat py-20">
-            <div className="container-page max-w-4xl">
-              <RevealOnScroll>
-                <p className="eyebrow mb-3">Nuestra canción</p>
-                <h2
-                  id="video-titulo"
-                  className="mb-8 font-display text-[clamp(1.75rem,6vw,3rem)] text-[var(--color-paper)]"
-                >
-                  Dale play
-                </h2>
-              </RevealOnScroll>
-              <RevealOnScroll delayMs={120}>
-                <YouTubeEmbed url={page.youtube_url} title={`Video para ${names}`} />
-              </RevealOnScroll>
+          <section aria-labelledby="video-titulo" className="story-beat py-12 md:py-24">
+            <div className="container-page">
+              <div className="mx-auto max-w-2xl">
+                <RevealOnScroll>
+                  <p className="eyebrow mb-3">Nuestra canción</p>
+                  <h2
+                    id="video-titulo"
+                    className="font-display text-[clamp(1.75rem,6vw,3rem)] tracking-[-0.02em] text-[var(--color-paper)]"
+                  >
+                    Dale play
+                  </h2>
+                </RevealOnScroll>
+                <RevealOnScroll delayMs={120} className="mt-6">
+                  <YouTubeEmbed url={page.youtube_url} title={`Video para ${names}`} />
+                </RevealOnScroll>
+              </div>
             </div>
           </section>
         )}
 
         {/* Beat 5 — Closing */}
-        <section aria-labelledby="cierre-titulo" className="story-beat py-24">
-          <div className="container-page max-w-2xl text-center">
-            <RevealOnScroll>
-              <p className="eyebrow mb-4">Con todo mi corazón</p>
-              <h2
-                id="cierre-titulo"
-                className="font-display text-[clamp(2rem,7vw,3.5rem)] text-[var(--color-paper)]"
-              >
-                Gracias por elegirme, {names}
-              </h2>
-              <p className="mx-auto mt-6 max-w-md text-base leading-relaxed text-[var(--color-text-muted)]">
-                Esto es solo un pedacito de todo lo que siento. Guardalo, volvé
-                cuando quieras y compartilo si te nace.
-              </p>
-            </RevealOnScroll>
-
-            <RevealOnScroll delayMs={120}>
-              <ShareCard
-                slug={slug}
-                className="mt-10"
-                shareText="Mirá la sorpresa que me hicieron"
-              />
-            </RevealOnScroll>
-
-            <div className="mx-auto mt-20 max-w-md border-t border-[var(--color-border)] pt-10">
-              <p className="font-display text-xl text-[var(--color-paper)]">
-                Te quedó linda, ¿no?
-              </p>
-              <a
-                href={getCheckoutUrl()}
-                onClick={handleCtaClick}
-                className="btn btn-brass mt-5 w-full sm:w-auto"
-                rel="noopener"
-              >
-                Creá la tuya →
-              </a>
-              <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.28em] text-[var(--color-text-muted)]">
-                Hecho con {getBrandName()}
-              </p>
-            </div>
-          </div>
-        </section>
+        <Closing
+          names={names}
+          slug={slug}
+          brand={brand}
+          checkoutUrl={checkoutUrl}
+          onCtaClick={handleCtaClick}
+        />
       </main>
     </>
   )

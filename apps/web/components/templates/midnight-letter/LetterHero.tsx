@@ -15,6 +15,9 @@ type LetterHeroProps = {
  * Beat 1 of the midnight-letter story. Lives in its own component so the real
  * surprise page (`/s/[slug]`) and the landing's phone preview render the exact
  * same hero instead of a look-alike mockup.
+ *
+ * This is the only beat that claims the full viewport (`story-beat-full`); the
+ * rest of the story sizes to its content and flows.
  */
 export default function LetterHero({
   names,
@@ -25,8 +28,13 @@ export default function LetterHero({
   showScrollHint = true,
 }: LetterHeroProps) {
   return (
-    <section className={`story-beat hero-pad ${className}`}>
-      <div className="mx-auto w-full max-w-3xl">
+    <section className={`story-beat story-beat-full hero-pad ${className}`}>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-1/2 aspect-square w-[85%] max-w-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(200,162,75,0.14),transparent_68%)] blur-2xl"
+      />
+
+      <div className="relative mx-auto w-full max-w-3xl">
         <p className="eyebrow mb-6">Para {names}</p>
         <h1 className="display-fluid font-display text-[var(--color-paper)]">
           {names}

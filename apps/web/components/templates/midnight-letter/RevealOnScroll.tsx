@@ -1,17 +1,29 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+
+type RevealVariant = 'up' | 'tilt' | 'scale'
 
 type RevealOnScrollProps = {
   children: ReactNode
   className?: string
   delayMs?: number
+  variant?: RevealVariant
+  style?: CSSProperties
+}
+
+const VARIANT_CLASS: Record<RevealVariant, string> = {
+  up: 'reveal-up',
+  tilt: 'reveal-tilt',
+  scale: 'reveal-scale',
 }
 
 export default function RevealOnScroll({
   children,
   className = '',
   delayMs = 0,
+  variant = 'up',
+  style,
 }: RevealOnScrollProps) {
   const ref = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(false)
@@ -44,8 +56,11 @@ export default function RevealOnScroll({
   return (
     <div
       ref={ref}
-      className={`reveal-up ${visible ? 'is-visible' : ''} ${className}`}
-      style={delayMs ? { transitionDelay: `${delayMs}ms` } : undefined}
+      className={`${VARIANT_CLASS[variant]} ${visible ? 'is-visible' : ''} ${className}`}
+      style={{
+        ...(delayMs ? { transitionDelay: `${delayMs}ms` } : null),
+        ...style,
+      }}
     >
       {children}
     </div>
