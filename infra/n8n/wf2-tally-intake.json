@@ -1,0 +1,790 @@
+{
+  "name": "WF2 — Tally intake",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tally-intake",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "28fa8628-92b4-41a0-8c7e-9e64e50049bc",
+      "name": "Tally Intake Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        360
+      ],
+      "webhookId": "45b1c5f3-a0d0-4c0c-a18e-6f9c4cd9b7c5",
+      "notes": "POST https://n8n.uniongloss.com/webhook/tally-intake. responseNode: the request gets a real 200/401 from the Respond nodes and never waits for the heavy work."
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst crypto = require('crypto');\n\nconst input = $input.first().json;\nconst payload = input.body || input;\nconst data = payload.data || payload;\nconst fields = Array.isArray(data.fields) ? data.fields : [];\n\nconst byLabel = {};\nfor (const field of fields) {\n  const label = String(field.label || field.key || '').trim().toLowerCase();\n  byLabel[label] = field.value;\n}\n\n// TODO(verify): confirm the real Tally labels/keys once the form is published.\n// Matching is loose (lowercase substring) so small copy edits do not break it.\nfunction pick() {\n  const needles = Array.prototype.slice.call(arguments).map(function (n) { return String(n).toLowerCase(); });\n  for (const needle of needles) {\n    for (const label of Object.keys(byLabel)) {\n      if (label.indexOf(needle) !== -1) return byLabel[label];\n    }\n  }\n  return undefined;\n}\n\nfunction asArray(value) {\n  if (value === undefined || value === null || value === '') return [];\n  return Array.isArray(value) ? value : [value];\n}\n\nconst orderCode = String(pick('codigo', 'code') || (data.hidden && data.hidden.code) || (payload.hiddenFields && payload.hiddenFields.code) || '').trim();\nconst responseId = String(data.responseId || data.submissionId || data.eventId || input.eventId || '').trim();\n\nconst nameA = String(pick('nombre a', 'name a', 'tu nombre') || '').trim();\nconst nameB = String(pick('nombre b', 'name b', 'su nombre') || '').trim();\nconst anniversaryRaw = pick('aniversario', 'fecha');\nconst youtubeUrl = String(pick('youtube', 'video') || '').trim();\nconst templateSlug = String(pick('plantilla', 'template') || 'midnight-letter').trim() || 'midnight-letter';\n\nconst messages = [];\nfor (const raw of asArray(pick('mensaje', 'message'))) {\n  for (const part of String(raw).split('\\n\\n')) {\n    const trimmed = part.trim();\n    if (trimmed) messages.push(trimmed);\n  }\n}\n\nconst photos = asArray(pick('foto', 'photo', 'imagen'))\n  .reduce(function (acc, value) { return acc.concat(asArray(value)); }, [])\n  .map(function (value) {\n    if (typeof value === 'string') return { url: value, alt: '' };\n    return { url: value.url || value.downloadUrl || '', alt: value.name || value.alt || '' };\n  })\n  .filter(function (p) { return !!p.url; })\n  .map(function (p, index) { return { url: p.url, alt: p.alt, position: index }; });\n\n// 12-char base32 slug, no ambiguous characters (PLAN rule #4).\nconst alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';\nlet slug = '';\nfor (const byte of crypto.randomBytes(12)) slug += alphabet[byte % alphabet.length];\n\nreturn [{\n  json: {\n    orderCode: orderCode,\n    responseId: responseId,\n    templateSlug: templateSlug,\n    youtubeUrl: youtubeUrl,\n    anniversaryDate: anniversaryRaw ? String(anniversaryRaw).slice(0, 10) : null,\n    coupleNames: { a: nameA, b: nameB },\n    coupleNamesJson: JSON.stringify({ a: nameA, b: nameB }),\n    messages: messages,\n    messagesJson: JSON.stringify(messages),\n    photos: photos,\n    photosJson: JSON.stringify(photos),\n    slug: slug\n  }\n}];\n"
+      },
+      "id": "dfbb857e-ea54-4277-9f8b-8083546ad329",
+      "name": "Map Tally Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        360
+      ],
+      "notes": "TODO(verify): Tally labels/keys. Emits orderCode, responseId, coupleNames, messages, photos and a 12-char base32 slug."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*)::int AS existing FROM webhook_events WHERE id = ($1::jsonb #>> '{}');",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify($('Map Tally Payload').item.json.responseId) }}"
+        }
+      },
+      "id": "77f11b19-8849-46dc-89d4-d51a86c5d5a3",
+      "name": "Check Tally Idempotency",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        680,
+        360
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED_ID",
+          "name": "Latido Postgres"
+        }
+      },
+      "notes": "PLAN 10 idempotency key = tally response id. Parameterized."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9fe1b4c7-293d-4f40-91df-31b66a81b27a",
+              "leftValue": "={{ $json.existing }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3db699ef-bb53-4dde-a97d-0ecd3697a15e",
+      "name": "Tally Already Processed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        920,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, code, status, buyer_email, buyer_name, template_slug FROM orders WHERE code = ($1::jsonb #>> '{}');",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify($('Map Tally Payload').item.json.orderCode) }}"
+        }
+      },
+      "id": "e9d167a6-5ce8-478a-b732-62c561389941",
+      "name": "Select Order by Code",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1160,
+        360
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED_ID",
+          "name": "Latido Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f6a95a32-935c-42d7-bf18-e66fd1655a72",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "91eef9dd-4566-4f85-a01d-b77c6b4e679e",
+      "name": "Order Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1400,
+        360
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "9e32e53a-c374-407d-bb79-e58b9c944f67",
+      "name": "Stop: Order Not Found",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        560
+      ],
+      "notes": "TODO(alert): send an admin alert (ADMIN_EMAIL) instead of silently stopping."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO pages\n  (order_id, slug, template_slug, couple_names, anniversary_date, youtube_url, theme, published_at)\nVALUES (\n  ($1::jsonb->>'order_id')::uuid,\n  $1::jsonb->>'slug',\n  COALESCE($1::jsonb->>'template_slug', 'midnight-letter'),\n  COALESCE($1::jsonb->'couple_names', '{}'::jsonb),\n  NULLIF($1::jsonb->>'anniversary_date', '')::date,\n  NULLIF($1::jsonb->>'youtube_url', ''),\n  '{}'::jsonb,\n  now()\n)\nRETURNING id, slug;",
+        "options": {
+          "queryReplacement": "={{ $json.pagePayload }}"
+        }
+      },
+      "id": "ac7858b0-8ba1-41f5-aa20-af8c6e5aec02",
+      "name": "Insert Page",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1640,
+        360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED_ID",
+          "name": "Latido Postgres"
+        }
+      },
+      "notes": "publishes immediately (published_at = now()). Parameterized via one $1::jsonb payload."
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "photos",
+        "include": "allOtherFields",
+        "options": {}
+      },
+      "id": "9bb38e5a-8bbc-490e-a707-6af1d6187f3a",
+      "name": "Split Photos",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1880,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "8db731f4-d9ee-4348-accd-bb6aae2a6cd5",
+      "name": "Download Photo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2120,
+        560
+      ],
+      "notes": "Tally file URLs carry a token and download without login (PLAN §14)."
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst crypto = require('crypto');\n\n// TODO(R2 signing): the \"Upload to R2\" node uses the n8n AWS (IAM) credential,\n// which signs requests with SigV4. Cloudflare R2 needs the S3 endpoint and\n// region \"auto\". If the AWS credential rejects region \"auto\", either sign the\n// request in a Code node (AWS SigV4) or switch to a presigned PUT URL.\n\nconst source = $('Split Photos').item.json;\nconst binary = $input.first().binary || {};\nconst data = binary.data || binary[Object.keys(binary)[0]] || {};\n\nconst url = source.url || '';\nconst fileName = data.fileName || '';\nconst fromName = fileName.indexOf('.') !== -1 ? fileName.split('.').pop().toLowerCase() : '';\nconst cleanUrl = url.split('?')[0];\nconst fromUrl = cleanUrl.indexOf('.') !== -1 ? cleanUrl.split('.').pop().toLowerCase() : '';\nlet ext = fromName || fromUrl || 'jpg';\nif (!/^[a-z0-9]{2,5}$/.test(ext)) ext = 'jpg';\n\nconst hash = crypto.createHash('sha1').update(String(url)).digest('hex').slice(0, 8);\nconst pageId = $('Insert Page').item.json.id;\nconst position = source.position || 0;\nconst r2Key = 'pages/' + pageId + '/' + position + '-' + hash + '.' + ext;\n\nlet publicBase = String($env.R2_PUBLIC_BASE_URL || '');\nwhile (publicBase.charAt(publicBase.length - 1) === '/') publicBase = publicBase.slice(0, -1);\n\nreturn [{\n  json: { r2_key: r2Key, url: publicBase + '/' + r2Key, alt: source.alt || '', position: position },\n  binary: binary\n}];\n"
+      },
+      "id": "c0bb506d-f6a2-4991-99e4-abe382a2deb5",
+      "name": "Prepare R2 Object",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2360,
+        560
+      ],
+      "notes": "r2_key = pages/<page_id>/<position>-<hash>.<ext> (PLAN §15)."
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://{{ $env.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com/{{ $env.R2_BUCKET }}/{{ $json.r2_key }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "aws",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "3417a4af-6cd4-4440-b73b-2ab0929b9180",
+      "name": "Upload to R2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2600,
+        560
+      ],
+      "credentials": {
+        "aws": {
+          "id": "REPLACE_R2_AWS_CRED_ID",
+          "name": "Cloudflare R2 (AWS IAM)"
+        }
+      },
+      "notes": "TODO(verify): R2 SigV4 region must be \"auto\"; see Prepare R2 Object."
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "photos",
+        "options": {}
+      },
+      "id": "ccc5e4b6-2797-472d-9a0e-b391bcf78c42",
+      "name": "Collect Photos",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        2840,
+        560
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO photos (page_id, r2_key, url, position, alt)\nSELECT\n  ($1::jsonb #>> '{}')::uuid,\n  elem->>'r2_key',\n  elem->>'url',\n  COALESCE((elem->>'position')::int, (ordinality - 1)::int),\n  elem->>'alt'\nFROM jsonb_array_elements($2::jsonb) WITH ORDINALITY AS t(elem, ordinality);",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify($('Insert Page').item.json.id) }},{{ JSON.stringify($json.photos || []) }}"
+        }
+      },
+      "id": "dd4627c3-2802-4a95-a31d-3108f479e8ae",
+      "name": "Insert Photos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        3080,
+        560
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED_ID",
+          "name": "Latido Postgres"
+        }
+      },
+      "notes": "Parameterized: page id + photos array as $1/$2. alt/url with quotes or commas are safe."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO messages (page_id, body, position, origin)\nSELECT\n  ($1::jsonb #>> '{}')::uuid,\n  value,\n  (ordinality - 1)::int,\n  'client'\nFROM jsonb_array_elements_text($2::jsonb) WITH ORDINALITY AS t(value, ordinality);",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify($('Insert Page').item.json.id) }},{{ $('Map Tally Payload').item.json.messagesJson }}"
+        }
+      },
+      "id": "91388ec5-3774-4fb3-a786-1e505031578e",
+      "name": "Insert Messages",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        3320,
+        360
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED_ID",
+          "name": "Latido Postgres"
+        }
+      },
+      "notes": "Parameterized: page id + message array. Message text with quotes or newlines is safe."
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// TODO(qr): node-qrcode (\"qrcode\" on npm) is NOT bundled with n8n. Either:\n//   1) docker exec posfinal-n8n npm install qrcode\n//      and set NODE_FUNCTION_ALLOW_EXTERNAL=qrcode, or\n//   2) replace this node with an HTTP Request to a QR generation service.\nlet qrDataUrl = '';\nlet publicUrl = '';\ntry {\n  const QRCode = require('qrcode');\n  const base = String($env.NEXT_PUBLIC_BASE_URL || 'https://amor.uniongloss.com');\n  const trimmed = base.charAt(base.length - 1) === '/' ? base.slice(0, -1) : base;\n  const slug = $('Insert Page').item.json.slug || '';\n  publicUrl = trimmed + '/s/' + slug;\n  qrDataUrl = await QRCode.toDataURL(publicUrl, { errorCorrectionLevel: 'H', margin: 4, width: 1024 });\n} catch (error) {\n  throw new Error('QR generation unavailable: ' + error.message + ' (install qrcode, see TODO)');\n}\nreturn [{ json: { publicUrl: publicUrl, qrDataUrl: qrDataUrl, qrBase64: qrDataUrl.split(',')[1] || '' } }];\n"
+      },
+      "id": "ed2db1d7-ad06-42b0-b5c6-80aa819a95bf",
+      "name": "Generate QR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3560,
+        360
+      ],
+      "notes": "node-qrcode, error correction H, margin 4 (PLAN §16). TODO: PDF print card."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE orders SET status = 'ready', delivered_at = now() WHERE id = (($1::jsonb #>> '{}'))::uuid RETURNING id, code, buyer_email, buyer_name;",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify($('Select Order by Code').item.json.id) }}"
+        }
+      },
+      "id": "30a6403b-9e8c-4616-b900-cc78be2f5f6a",
+      "name": "Mark Order Ready",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        3800,
+        360
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED_ID",
+          "name": "Latido Postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.MAIL_FROM }}",
+        "toEmail": "={{ $json.buyer_email }}",
+        "subject": "=Tu sorpresa Latido está lista",
+        "emailFormat": "html",
+        "html": "=<p>¡Hola {{ $json.buyer_name || '' }}!</p>\n<p>Tu página ya está publicada. Este es el link para compartir:</p>\n<p><a href=\"{{ $('Generate QR').item.json.publicUrl }}\">{{ $('Generate QR').item.json.publicUrl }}</a></p>\n<p>También te dejamos el QR para que lo imprimas y lo regales en persona:</p>\n<p><img src=\"{{ $('Generate QR').item.json.qrDataUrl }}\" alt=\"QR de tu sorpresa Latido\" width=\"240\" height=\"240\" /></p>\n<p>— Latido</p>",
+        "options": {}
+      },
+      "id": "45485d23-e3b2-4df3-b9b3-fc66118df872",
+      "name": "Send Delivery Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        4040,
+        360
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_SMTP_CRED_ID",
+          "name": "Latido SMTP"
+        }
+      },
+      "notes": "TODO: attach the QR as PNG/PDF instead of inline data URI (PLAN §16)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\nfunction safeEqual(a, b) {\n  const left = Buffer.from(String(a));\n  const right = Buffer.from(String(b));\n  if (left.length !== right.length) return false;\n  return crypto.timingSafeEqual(left, right);\n}\n\nconst item = $input.first();\nconst json = item.json || {};\nconst headers = json.headers || {};\nconst provided = headers['x-latido-secret'] || '';\nconst expected = $env.TALLY_WEBHOOK_SECRET || '';\nconst authorized = expected.length > 0 && safeEqual(provided, expected);\n\n// TODO(latido): constant-time shared-secret check. Replace with the native\n// signature scheme once confirmed against the provider docs.\nreturn [{ json: Object.assign({}, json, { authorized }) }];"
+      },
+      "id": "01f41d0a-8225-42ef-a8ef-38e58b218989",
+      "name": "Verify Tally Secret",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        560
+      ],
+      "notes": "Shared secret in x-latido-secret vs $env.TALLY_WEBHOOK_SECRET. // TODO(latido): replace with Tally native signature once confirmed."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9cbda0a0-d077-4657-9db3-8450a7d628de",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9c46ae33-1028-4d10-87bf-35c3d9ce6a6b",
+      "name": "Tally Secret Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        560
+      ],
+      "notes": "true = shared secret matches -> continue; false -> 401 and stop."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": {
+          "ok": true,
+          "accepted": true
+        },
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "c3e7bb3f-ab06-48e4-8441-c3a9639eb67d",
+      "name": "Respond Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        680,
+        480
+      ],
+      "notes": "Requires the Webhook node responseMode = responseNode. Responds immediately, the run keeps going."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": {
+          "ok": false,
+          "error": "unauthorized"
+        },
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "640b6fdb-e26c-444b-afec-37f521a719db",
+      "name": "Respond Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        680,
+        660
+      ],
+      "notes": "Requires the Webhook node responseMode = responseNode. Responds immediately, the run keeps going."
+    },
+    {
+      "parameters": {},
+      "id": "9d763713-0ab0-4fa8-881f-96b7ce5417e2",
+      "name": "Stop: Unauthorized",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        920,
+        660
+      ],
+      "notes": "Invalid shared secret. Response 401 already sent."
+    },
+    {
+      "parameters": {
+        "jsCode": "const order = $input.first().json;\nconst mapped = $('Map Tally Payload').item.json;\nconst payload = {\n  order_id: order.id,\n  slug: mapped.slug,\n  template_slug: mapped.templateSlug || 'midnight-letter',\n  couple_names: mapped.coupleNames || { a: '', b: '' },\n  anniversary_date: mapped.anniversaryDate || null,\n  youtube_url: mapped.youtubeUrl || null,\n};\nreturn [{ json: { pagePayload: JSON.stringify(payload) } }];"
+      },
+      "id": "740b3c1b-4436-46aa-a74d-c718e940ac0f",
+      "name": "Prepare Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        360
+      ],
+      "notes": "Builds one JSON payload so Insert Page uses a single parameterized $1 (quotes, commas and newlines are safe)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst mapped = $('Map Tally Payload').item.json;\nreturn [{ json: Object.assign({}, item, { photos: mapped.photos || [] }) }];"
+      },
+      "id": "91a7c7be-364d-4ddd-b925-55b5fed40de0",
+      "name": "Attach Photos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        360
+      ],
+      "notes": "Insert Page only RETURNINGs id/slug; re-attach the photo list from Map Tally Payload before Split Photos."
+    }
+  ],
+  "connections": {
+    "Tally Intake Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Tally Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Tally Payload": {
+      "main": [
+        [
+          {
+            "node": "Check Tally Idempotency",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Tally Idempotency": {
+      "main": [
+        [
+          {
+            "node": "Tally Already Processed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tally Already Processed?": {
+      "main": [
+        [
+          {
+            "node": "Select Order by Code",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Select Order by Code": {
+      "main": [
+        [
+          {
+            "node": "Order Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Found?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Page",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop: Order Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Page": {
+      "main": [
+        [
+          {
+            "node": "Attach Photos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Photos": {
+      "main": [
+        [
+          {
+            "node": "Download Photo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Photo": {
+      "main": [
+        [
+          {
+            "node": "Prepare R2 Object",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare R2 Object": {
+      "main": [
+        [
+          {
+            "node": "Upload to R2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to R2": {
+      "main": [
+        [
+          {
+            "node": "Collect Photos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Photos": {
+      "main": [
+        [
+          {
+            "node": "Insert Photos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Photos": {
+      "main": [
+        [
+          {
+            "node": "Insert Messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Messages": {
+      "main": [
+        [
+          {
+            "node": "Generate QR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate QR": {
+      "main": [
+        [
+          {
+            "node": "Mark Order Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Order Ready": {
+      "main": [
+        [
+          {
+            "node": "Send Delivery Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Tally Secret": {
+      "main": [
+        [
+          {
+            "node": "Tally Secret Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tally Secret Valid?": {
+      "main": [
+        [
+          {
+            "node": "Respond Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Accepted": {
+      "main": [
+        [
+          {
+            "node": "Map Tally Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Unauthorized": {
+      "main": [
+        [
+          {
+            "node": "Stop: Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Page": {
+      "main": [
+        [
+          {
+            "node": "Insert Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach Photos": {
+      "main": [
+        [
+          {
+            "node": "Split Photos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false,
+  "_comment": "Maps a Tally submission, downloads the uploaded photos, uploads them to Cloudflare R2, persists page/messages/photos, generates a QR and emails the buyer. The webhook authenticates x-latido-secret against $env.TALLY_WEBHOOK_SECRET and returns 401 on mismatch (responseMode=responseNode; the 200 is sent from Respond Accepted before the heavy work). All Postgres values are parameterized; no user data is interpolated into SQL text. TODO(latido): replace the shared secret with Tally native signature once confirmed."
+}

@@ -1,0 +1,61 @@
+# ============================================================
+# Latido — docker-compose.prod.yml (PRODUCCIÓN)
+# Desplegado por .github/workflows/deploy.yml al push a `produccion`.
+# Uso manual:  docker compose -f docker-compose.prod.yml up -d --build
+#
+# IMPORTANTE: Caddy NO vive acá. Es el del salón (`posfinal-caddy`) y
+# comparte 80/443. Nuestro contenedor se une a su red para que lo alcance
+# por nombre (`latido-web:3000`). Ver DEPLOY.md §5.
+# ============================================================
+name: latido
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: latido-web
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - NODE_ENV=production
+      - TZ=America/Bogota
+      - DATABASE_URL=postgres://latido:${POSTGRES_PASSWORD}@db:5432/latido
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - latido-internal
+      - posfinal
+
+  db:
+    image: postgres:16-alpine
+    container_name: latido-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: latido
+      POSTGRES_USER: latido
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: America/Bogota
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U latido"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - latido-internal
+      # n8n (posfinal-n8n) vive en esta red y necesita alcanzar latido-db:5432.
+      - posfinal
+
+volumes:
+  pg_data:
+
+networks:
+  latido-internal:
+    driver: bridge
+  posfinal:
+    external: true
+    name: sistema-salon-belleza-gloss_posfinal-network

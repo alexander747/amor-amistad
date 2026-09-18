@@ -1,0 +1,15 @@
+**/node_modules
+**/.next
+**/out
+**/.turbo
+**/coverage
+.git
+.gitignore
+.env
+.env.*
+*.log
+**/*.md
+PLAN.md
+openspec
+skills
+infra

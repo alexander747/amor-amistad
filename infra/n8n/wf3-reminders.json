@@ -1,0 +1,102 @@
+{
+  "name": "WF3 — Reminders (paid without page > 24h)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 14 * * *"
+            }
+          ]
+        }
+      },
+      "id": "2b420333-81ff-4fa1-81eb-011ebdb2468d",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        220,
+        320
+      ],
+      "notes": "14:00 America/Bogota (ensure GENERIC_TIMEZONE is aligned)."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH candidates AS (\n  SELECT\n    o.id,\n    o.code,\n    o.buyer_email,\n    o.buyer_name,\n    'reminder:' || o.id::text AS dedup_id\n  FROM orders o\n  LEFT JOIN pages p ON p.order_id = o.id\n  WHERE o.status = 'paid'\n    AND p.id IS NULL\n    AND o.paid_at IS NOT NULL\n    AND o.paid_at < now() - interval '24 hours'\n),\nclaimed AS (\n  INSERT INTO webhook_events (id, source)\n  SELECT dedup_id, 'reminder' FROM candidates\n  ON CONFLICT (id) DO NOTHING\n  RETURNING id\n)\nSELECT c.id, c.code, c.buyer_email, c.buyer_name\nFROM candidates c\nJOIN claimed cl ON cl.id = c.dedup_id;",
+        "options": {}
+      },
+      "id": "0c237883-3cbe-48ca-8c12-1207db102980",
+      "name": "Claim Pending Reminders",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        460,
+        320
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED_ID",
+          "name": "Latido Postgres"
+        }
+      },
+      "notes": "Atomically claims reminders using webhook_events as a dedup store: key reminder:<order_id> + ON CONFLICT DO NOTHING. Choice: at most ONE reminder ever per order (see README section 7)."
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.MAIL_FROM }}",
+        "toEmail": "={{ $json.buyer_email }}",
+        "subject": "=Te falta cargar los datos de tu sorpresa Latido",
+        "emailFormat": "html",
+        "html": "=<p>¡Hola {{ $json.buyer_name || '' }}!</p>\n<p>Tu pago está confirmado, pero todavía no recibimos las fotos y los mensajes de tu sorpresa.</p>\n<p><a href=\"{{ $env.TALLY_FORM_URL }}?code={{ $json.code }}\">Completar mi sorpresa</a></p>\n<p>Tu código de pedido es <strong>{{ $json.code }}</strong>.</p>\n<p>— Latido</p>",
+        "options": {}
+      },
+      "id": "2b3043af-3555-4855-92a1-a677332e05f0",
+      "name": "Send Reminder",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        700,
+        320
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_SMTP_CRED_ID",
+          "name": "Latido SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily Schedule": {
+      "main": [
+        [
+          {
+            "node": "Claim Pending Reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Pending Reminders": {
+      "main": [
+        [
+          {
+            "node": "Send Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false,
+  "_comment": "Daily cron: claims and emails buyers whose order is paid but still has no page after 24h. Dedup via webhook_events keyed reminder:<order_id> with ON CONFLICT DO NOTHING, so an order receives at most one reminder ever. To allow one reminder per day instead, change the key to reminder:<order_id>:<YYYY-MM-DD> using to_char(current_date, 'YYYY-MM-DD')."
+}

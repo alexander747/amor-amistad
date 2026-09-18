@@ -1,0 +1,21 @@
+# ============================================================
+# Latido — snippet para el Caddyfile existente
+# ============================================================
+# NO reemplaza el Caddyfile del salón: AGREGAR este bloque al final
+# del archivo `docker/caddy/Caddyfile` del proyecto
+# `sistema-salon-belleza-gloss`.
+#
+# Pasos (en la VPS):
+#   1. Backup:  cp docker/caddy/Caddyfile docker/caddy/Caddyfile.bak
+#   2. Agregar el bloque de abajo.
+#   3. Recargar sin downtime:
+#        docker exec posfinal-caddy caddy reload --config /etc/caddy/Caddyfile
+#   4. Verificar:  curl -I https://amor.uniongloss.com
+#
+# Requisito previo: registro DNS
+#        A  amor.uniongloss.com  ->  51.161.113.43
+# ============================================================
+
+amor.uniongloss.com {
+	reverse_proxy latido-web:3000
+}

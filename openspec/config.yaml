@@ -1,0 +1,50 @@
+# OpenSpec Configuration — amor-amistad (Latido)
+# Alineado con las convenciones del proyecto `sistema-salon-belleza-gloss`.
+
+schema: spec-driven
+
+context: |
+  Latido — páginas sorpresa personalizadas para parejas, entregadas por URL única + QR imprimible.
+  Stack: Next.js 15 (App Router) + TypeScript + Tailwind v4 + PostgreSQL 16 + n8n + Cloudflare R2 + Mercado Pago + Tally.
+  Infra: Docker sobre VPS compartida con el stack `posfinal-*` (Caddy como edge proxy).
+  Dominio: https://amor.uniongloss.com
+  Fuente de verdad funcional: PLAN.md (raíz del repo).
+
+strict_tdd: false
+# Reason: el proyecto aún no tiene runner de tests configurado.
+# Al agregar Vitest/Playwright, actualizar esta sección (ver `sistema-salon-belleza-gloss` como referencia).
+
+testing:
+  available: false
+  runner: null
+  framework: null
+  layers:
+    unit: false
+    integration: false
+    e2e: false
+  coverage:
+    available: false
+    provider: null
+    command: null
+  quality:
+    linter: "eslint (next lint)"
+    type_checker: "tsc --noEmit"
+    formatter: "prettier"
+
+phases:
+  proposal: { required: true, auto_skip: false }
+  spec: { required: true, auto_skip: false }
+  design: { required: true, auto_skip: false }
+  tasks: { required: true, auto_skip: false }
+  apply:
+    required: true
+    auto_skip: false
+    rules:
+      tdd: false
+      build_command: "cd apps/web && npm run build"
+  verify:
+    required: true
+    auto_skip: false
+    test_command: null
+    build_command: "cd apps/web && npx tsc --noEmit && npm run build"
+  archive: { required: true, auto_skip: false }

@@ -1,0 +1,343 @@
+{
+  "name": "WF4 — Deliver QR (on demand)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "deliver-qr",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "cb5803fd-e130-49ca-ae48-642a71c3f3c9",
+      "name": "Deliver QR Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        320
+      ],
+      "webhookId": "3b3d08e9-b995-4b1b-9a19-d77a6e6b6096",
+      "notes": "POST https://n8n.uniongloss.com/webhook/deliver-qr?code=LAT-XXXXXX. responseNode: 401 for a bad admin secret, 200 otherwise, without waiting for QR/email work."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT o.id AS order_id, o.code, o.buyer_email, o.buyer_name, p.id AS page_id, p.slug FROM orders o JOIN pages p ON p.order_id = o.id WHERE o.code = ($1::jsonb #>> '{}');",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify($json.query.code || ($json.body && $json.body.code) || '') }}"
+        }
+      },
+      "id": "790e8cd6-01cb-46bc-ade1-436fc7036063",
+      "name": "Select Order and Page",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        460,
+        320
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED_ID",
+          "name": "Latido Postgres"
+        }
+      },
+      "notes": "Parameterized lookup by order code."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0bde4891-bd61-4ea6-8c24-54eead9a8c04",
+              "leftValue": "={{ $json.slug }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1a90c62e-54cc-4e71-904e-232c09ecca03",
+      "name": "Page Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        700,
+        320
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0b31c20c-14b2-49bc-b9ac-48e723d43fb8",
+      "name": "Stop: Not Found",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        700,
+        520
+      ],
+      "notes": "TODO(alert): notify admin when the code has no page."
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// TODO(qr): node-qrcode (\"qrcode\" on npm) is NOT bundled with n8n. Either:\n//   1) docker exec posfinal-n8n npm install qrcode\n//      and set NODE_FUNCTION_ALLOW_EXTERNAL=qrcode, or\n//   2) replace this node with an HTTP Request to a QR generation service.\nlet qrDataUrl = '';\nlet publicUrl = '';\ntry {\n  const QRCode = require('qrcode');\n  const base = String($env.NEXT_PUBLIC_BASE_URL || 'https://amor.uniongloss.com');\n  const trimmed = base.charAt(base.length - 1) === '/' ? base.slice(0, -1) : base;\n  const slug = $json.slug || '';\n  publicUrl = trimmed + '/s/' + slug;\n  qrDataUrl = await QRCode.toDataURL(publicUrl, { errorCorrectionLevel: 'H', margin: 4, width: 1024 });\n} catch (error) {\n  throw new Error('QR generation unavailable: ' + error.message + ' (install qrcode, see TODO)');\n}\nreturn [{ json: { publicUrl: publicUrl, qrDataUrl: qrDataUrl, qrBase64: qrDataUrl.split(',')[1] || '' } }];\n"
+      },
+      "id": "687d6548-2b37-4540-a887-f3aed931f8f3",
+      "name": "Generate QR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        260
+      ],
+      "notes": "node-qrcode, error correction H, margin 4 (PLAN §16)."
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.MAIL_FROM }}",
+        "toEmail": "={{ $('Select Order and Page').item.json.buyer_email }}",
+        "subject": "=Tu QR de Latido (reenvío)",
+        "emailFormat": "html",
+        "html": "=<p>¡Hola {{ $('Select Order and Page').item.json.buyer_name || '' }}!</p>\n<p>Este es el link de tu sorpresa:</p>\n<p><a href=\"{{ $json.publicUrl }}\">{{ $json.publicUrl }}</a></p>\n<p><img src=\"{{ $json.qrDataUrl }}\" alt=\"QR de tu sorpresa Latido\" width=\"240\" height=\"240\" /></p>\n<p>— Latido</p>",
+        "options": {}
+      },
+      "id": "c2dfee8f-bdbd-4a9b-a4e8-758f2e22966f",
+      "name": "Resend Delivery Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1180,
+        260
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_SMTP_CRED_ID",
+          "name": "Latido SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\n\nfunction safeEqual(a, b) {\n  const left = Buffer.from(String(a));\n  const right = Buffer.from(String(b));\n  if (left.length !== right.length) return false;\n  return crypto.timingSafeEqual(left, right);\n}\n\nconst item = $input.first();\nconst json = item.json || {};\nconst headers = json.headers || {};\nconst provided = headers['x-latido-secret'] || '';\nconst expected = $env.LATIDO_ADMIN_SECRET || '';\nconst authorized = expected.length > 0 && safeEqual(provided, expected);\n\n// TODO(latido): constant-time shared-secret check. Replace with the native\n// signature scheme once confirmed against the provider docs.\nreturn [{ json: Object.assign({}, json, { authorized }) }];"
+      },
+      "id": "084d8702-ac8c-4318-9a97-84bb3add6c75",
+      "name": "Verify Admin Secret",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        560
+      ],
+      "notes": "Shared secret in x-latido-secret vs $env.LATIDO_ADMIN_SECRET."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9f6f7431-53fb-447f-9010-483ae7eb25c7",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "97babac7-c260-41fb-ba8e-94ab65a9c81e",
+      "name": "Admin Secret Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        460,
+        560
+      ],
+      "notes": "true = shared secret matches -> continue; false -> 401 and stop."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": {
+          "ok": true,
+          "accepted": true
+        },
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "00627642-e61c-456b-be18-fb0c0f74d223",
+      "name": "Respond Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        700,
+        480
+      ],
+      "notes": "Requires the Webhook node responseMode = responseNode. Responds immediately, the run keeps going."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": {
+          "ok": false,
+          "error": "unauthorized"
+        },
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "f3749ec7-45e3-41b9-ae2b-ab755f48bc2b",
+      "name": "Respond Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        700,
+        660
+      ],
+      "notes": "Requires the Webhook node responseMode = responseNode. Responds immediately, the run keeps going."
+    },
+    {
+      "parameters": {},
+      "id": "b82e7efd-b6f8-4050-8e73-94f8d36de2e9",
+      "name": "Stop: Unauthorized",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        940,
+        660
+      ],
+      "notes": "Invalid admin secret. Response 401 already sent."
+    }
+  ],
+  "connections": {
+    "Deliver QR Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Admin Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Order and Page": {
+      "main": [
+        [
+          {
+            "node": "Page Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page Found?": {
+      "main": [
+        [
+          {
+            "node": "Generate QR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop: Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate QR": {
+      "main": [
+        [
+          {
+            "node": "Resend Delivery Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Admin Secret": {
+      "main": [
+        [
+          {
+            "node": "Admin Secret Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Admin Secret Valid?": {
+      "main": [
+        [
+          {
+            "node": "Respond Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Accepted": {
+      "main": [
+        [
+          {
+            "node": "Select Order and Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Unauthorized": {
+      "main": [
+        [
+          {
+            "node": "Stop: Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false,
+  "_comment": "Webhook to re-send the surprise URL + QR for a given order code. Call it with ?code=LAT-XXXXXX (query or JSON body) and header x-latido-secret = $env.LATIDO_ADMIN_SECRET; a bad secret returns 401 (responseMode=responseNode). Postgres values are parameterized. TODO(alert): notify admin when the code has no page."
+}

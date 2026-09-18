@@ -1,0 +1,350 @@
+{
+  "name": "WF1 — Mercado Pago payment",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mp-payment",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "751bb028-b460-4820-9cbb-6e6a3233b3fb",
+      "name": "MP Payment Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        320
+      ],
+      "webhookId": "845a80f5-71a5-4cd2-ae00-82070a1d7968",
+      "notes": "POST https://n8n.uniongloss.com/webhook/mp-payment"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst crypto = require('crypto');\n\nconst input = $input.first().json;\nconst headers = input.headers || {};\nconst query = input.query || {};\nconst body = input.body || input;\n\n// Mercado Pago sends data.id in the notification query string and, for newer\n// webhooks, also in the body. Prefer the query value (that is what the\n// signature manifest is built from).\nconst dataId = query['data.id'] || (body.data && body.data.id) || body.id;\nconst requestId = headers['x-request-id'] || '';\nconst signatureHeader = headers['x-signature'] || '';\n\nif (!dataId) {\n  throw new Error('MP webhook: missing data.id');\n}\n\n// x-signature format: \"ts=1704908010,v1=618c85...\"\nconst parts = {};\nfor (const chunk of String(signatureHeader).split(',')) {\n  const idx = chunk.indexOf('=');\n  if (idx > -1) parts[chunk.slice(0, idx).trim()] = chunk.slice(idx + 1).trim();\n}\nconst ts = parts.ts;\nconst v1 = parts.v1;\nif (!ts || !v1) {\n  throw new Error('MP webhook: missing ts/v1 in x-signature');\n}\n\nconst secret = $env.MP_WEBHOOK_SECRET;\nif (!secret) {\n  throw new Error('MP_WEBHOOK_SECRET env var is not set');\n}\n\n// TODO(verify): manifest template per Mercado Pago docs:\n//   id:[data.id];request-id:[x-request-id];ts:[ts];\n// Re-check against the current MP webhook signature docs before going live.\nconst manifest = 'id:' + String(dataId) + ';request-id:' + requestId + ';ts:' + ts + ';';\nconst hmac = crypto.createHmac('sha256', secret).update(manifest).digest('hex');\nif (hmac !== v1) {\n  throw new Error('MP webhook: invalid x-signature');\n}\n\n// Order code: LAT-XXXXXX (base32, no ambiguous characters).\n// Generated here so downstream nodes (email) can reuse it.\nconst alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';\nlet suffix = '';\nfor (const byte of crypto.randomBytes(6)) {\n  suffix += alphabet[byte % alphabet.length];\n}\n\nreturn [{ json: { valid: true, paymentId: String(dataId), requestId, ts, orderCode: 'LAT-' + suffix } }];\n"
+      },
+      "id": "cb424834-4998-4169-83b1-760913c9c464",
+      "name": "Validate MP Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        320
+      ],
+      "notes": "HMAC-SHA256 over id:[data.id];request-id:[x-request-id];ts:[ts];"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*)::int AS existing FROM webhook_events WHERE id = ($1::jsonb #>> '{}');",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify($('Validate MP Signature').item.json.paymentId) }}"
+        }
+      },
+      "id": "ac80366a-8950-418c-a25a-6434ddad798f",
+      "name": "Check Idempotency",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        700,
+        320
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED_ID",
+          "name": "Latido Postgres"
+        }
+      },
+      "notes": "Parameterized: payment id travels inside $1::jsonb, never in SQL text."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bae446ed-324d-4cb7-b301-e687937e8da4",
+              "leftValue": "={{ $json.existing }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b90959d4-64ee-4727-86ed-7970b949934d",
+      "name": "Already Processed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        940,
+        320
+      ],
+      "notes": "true = not processed yet -> continue"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.mercadopago.com/v1/payments/{{ $('Validate MP Signature').item.json.paymentId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "168593b3-a87a-4ff3-b26d-cb1a61941423",
+      "name": "Get MP Payment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1180,
+        220
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_MP_HEADER_AUTH_CRED_ID",
+          "name": "Mercado Pago API (Header Auth)"
+        }
+      },
+      "notes": "Header Auth credential: Authorization = \"Bearer <MP_ACCESS_TOKEN>\""
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a082a711-5052-45c6-831d-0202927a8ee4",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "approved",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a3e55be2-206e-4d6b-a402-dec9957797ad",
+      "name": "Payment Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1420,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO orders\n  (code, status, mp_payment_id, mp_status, external_reference, buyer_name, buyer_email, amount_cop, paid_at)\nVALUES (\n  $1::jsonb->>'order_code',\n  'paid',\n  $1::jsonb->>'mp_payment_id',\n  $1::jsonb->>'mp_status',\n  $1::jsonb->>'external_reference',\n  $1::jsonb->>'buyer_name',\n  $1::jsonb->>'buyer_email',\n  ($1::jsonb->>'amount_cop')::int,\n  now()\n)\nON CONFLICT (code) DO UPDATE SET\n  status = EXCLUDED.status,\n  mp_payment_id = EXCLUDED.mp_payment_id,\n  mp_status = EXCLUDED.mp_status,\n  external_reference = EXCLUDED.external_reference,\n  buyer_name = EXCLUDED.buyer_name,\n  buyer_email = EXCLUDED.buyer_email,\n  paid_at = COALESCE(orders.paid_at, EXCLUDED.paid_at)\nRETURNING id, code, buyer_email, buyer_name;",
+        "options": {
+          "queryReplacement": "={{ $json.orderPayload }}"
+        }
+      },
+      "id": "0c54d69e-2d8b-4d5f-8c78-72b9fe4e1421",
+      "name": "Upsert Order",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1660,
+        220
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED_ID",
+          "name": "Latido Postgres"
+        }
+      },
+      "notes": "Parameterized: all values arrive as one $1::jsonb payload (no string interpolation)."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO webhook_events (id, source) VALUES (($1::jsonb #>> '{}'), 'mercadopago') ON CONFLICT (id) DO NOTHING;",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify($('Validate MP Signature').item.json.paymentId) }}"
+        }
+      },
+      "id": "54bbb0bb-13b5-425a-ab07-1bf7a6023eb8",
+      "name": "Insert Webhook Event",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1900,
+        220
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED_ID",
+          "name": "Latido Postgres"
+        }
+      },
+      "notes": "Parameterized idempotency key (mercadopago)."
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.MAIL_FROM }}",
+        "toEmail": "={{ $('Upsert Order').item.json.buyer_email }}",
+        "subject": "=Tu pago fue aprobado — completá tu sorpresa Latido",
+        "emailFormat": "html",
+        "html": "=<p>¡Hola {{ $('Upsert Order').item.json.buyer_name || '' }}!</p>\n<p>Tu pago fue aprobado. Ya podés cargar las fotos, los mensajes y el video de tu sorpresa.</p>\n<p><a href=\"{{ $env.TALLY_FORM_URL }}?code={{ $('Upsert Order').item.json.code }}\">Completar mi sorpresa</a></p>\n<p>Tu código de pedido es <strong>{{ $('Upsert Order').item.json.code }}</strong>.</p>\n<p>— Latido</p>",
+        "options": {}
+      },
+      "id": "ae1860b7-d41c-4dca-ba0c-c2cf25aa37b2",
+      "name": "Send Tally Link",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2140,
+        220
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_SMTP_CRED_ID",
+          "name": "Latido SMTP"
+        }
+      },
+      "notes": "Reads buyer from Upsert Order RETURNING (Insert Webhook Event returns no rows). TODO: TALLY_FORM_URL is not in PLAN.md 20."
+    },
+    {
+      "parameters": {
+        "jsCode": "const payment = $input.first().json;\nconst orderCode = $('Validate MP Signature').item.json.orderCode;\nconst payer = payment.payer || {};\nconst buyerName = [payer.first_name, payer.last_name].filter(Boolean).join(' ').trim();\nconst amount = payment.transaction_amount !== undefined && payment.transaction_amount !== null\n  ? Math.round(Number(payment.transaction_amount))\n  : null;\nconst payload = {\n  order_code: orderCode,\n  mp_payment_id: payment.id !== undefined && payment.id !== null ? String(payment.id) : null,\n  mp_status: payment.status || null,\n  external_reference: payment.external_reference || null,\n  buyer_name: buyerName || null,\n  buyer_email: payer.email || null,\n  amount_cop: amount,\n};\n\n// Single JSON payload -> the Postgres node uses one parameterized $1::jsonb.\n// TODO(latido): keep this in sync with the orders columns in PLAN.md 10.\nreturn [{ json: { orderPayload: JSON.stringify(payload) } }];"
+      },
+      "id": "f055d2d8-0760-477e-ad67-85b179bd0717",
+      "name": "Prepare Order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        220
+      ],
+      "notes": "Builds one JSON payload so Upsert Order can use a single parameterized $1 (quotes, commas and newlines are safe)."
+    }
+  ],
+  "connections": {
+    "MP Payment Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate MP Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate MP Signature": {
+      "main": [
+        [
+          {
+            "node": "Check Idempotency",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Idempotency": {
+      "main": [
+        [
+          {
+            "node": "Already Processed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Processed?": {
+      "main": [
+        [
+          {
+            "node": "Get MP Payment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Get MP Payment": {
+      "main": [
+        [
+          {
+            "node": "Payment Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Payment Approved?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Order",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Upsert Order": {
+      "main": [
+        [
+          {
+            "node": "Insert Webhook Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Webhook Event": {
+      "main": [
+        [
+          {
+            "node": "Send Tally Link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Order": {
+      "main": [
+        [
+          {
+            "node": "Upsert Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "active": false,
+  "_comment": "Validates the Mercado Pago x-signature, checks idempotency against webhook_events, fetches the payment, and on approval upserts the order and emails the Tally intake link. Webhook responds 200 immediately (responseMode=onReceived) so MP never times out. All Postgres values are parameterized ($1::jsonb); no user data is interpolated into SQL text. TODO(verify): MP signature manifest template."
+}

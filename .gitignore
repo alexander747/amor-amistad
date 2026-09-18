@@ -1,0 +1,31 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# os / editor
+.DS_Store
+*.pem
+
+# typescript
+*.tsbuildinfo
+
+# build artifacts / backups
+dist/
+backups/
+.playwright-mcp/
+
+# Local AI runtime state
+.atl/
