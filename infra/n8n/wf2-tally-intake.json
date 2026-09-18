@@ -395,7 +395,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\n\nfunction safeEqual(a, b) {\n  const left = Buffer.from(String(a));\n  const right = Buffer.from(String(b));\n  if (left.length !== right.length) return false;\n  return crypto.timingSafeEqual(left, right);\n}\n\nconst item = $input.first();\nconst json = item.json || {};\nconst headers = json.headers || {};\nconst provided = headers['x-latido-secret'] || '';\nconst expected = $env.TALLY_WEBHOOK_SECRET || '';\nconst authorized = expected.length > 0 && safeEqual(provided, expected);\n\n// TODO(latido): constant-time shared-secret check. Replace with the native\n// signature scheme once confirmed against the provider docs.\nreturn [{ json: Object.assign({}, json, { authorized }) }];"
+        "jsCode": "const crypto = require('crypto');\n\nfunction safeEqual(a, b) {\n  const left = Buffer.from(String(a));\n  const right = Buffer.from(String(b));\n  if (left.length !== right.length) return false;\n  return crypto.timingSafeEqual(left, right);\n}\n\nconst item = $input.first();\nconst json = item.json || {};\nconst headers = json.headers || {};\nconst provided = headers['x-latido-secret'] || '';\nconst expected = $env.TALLY_WEBHOOK_SECRET || '';\nconst authorized = expected.length > 0 && safeEqual(provided, expected);\n\n// TODO(latido): constant-time shared-secret check. Replace with the native\n// signature scheme once confirmed against the provider docs.\n// String en vez de booleano: el nodo If de n8n 2.x con validacion estricta\n// rechaza el valor booleano false (\"Wrong type: '' is a string\").\nreturn [{ json: Object.assign({}, json, { authorized: authorized ? 'yes' : 'no' }) }];"
       },
       "id": "01f41d0a-8225-42ef-a8ef-38e58b218989",
       "name": "Verify Tally Secret",
@@ -413,23 +413,24 @@
           "options": {
             "caseSensitive": true,
             "leftValue": "",
-            "typeValidation": "strict",
+            "typeValidation": "loose",
             "version": 2
           },
           "conditions": [
             {
               "id": "9cbda0a0-d077-4657-9db3-8450a7d628de",
               "leftValue": "={{ $json.authorized }}",
-              "rightValue": "",
+              "rightValue": "yes",
               "operator": {
-                "type": "boolean",
-                "operation": "true"
+                "type": "string",
+                "operation": "equals"
               }
             }
           ],
           "combinator": "and"
         },
-        "options": {}
+        "options": {},
+        "notes": "Comparacion de strings (\"yes\"/\"no\") en vez de booleano estricto: n8n 2.x rechaza false en condiciones boolean."
       },
       "id": "9c46ae33-1028-4d10-87bf-35c3d9ce6a6b",
       "name": "Tally Secret Valid?",
