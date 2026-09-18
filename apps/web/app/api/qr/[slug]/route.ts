@@ -30,7 +30,10 @@ export async function GET(request: Request, { params }: RouteContext) {
   const base = getBaseUrl().replace(/\/+$/, '')
   const target = `${base}/s/${slug}`
 
-  const requested = Number(new URL(request.url).searchParams.get('w'))
+  // Sin `?w=` el default es 1024 px (bueno para imprimir).
+  // Ojo: `Number(null)` es 0, así que hay que chequear el string crudo.
+  const rawWidth = new URL(request.url).searchParams.get('w')
+  const requested = rawWidth ? Number(rawWidth) : Number.NaN
   const width = Number.isFinite(requested)
     ? Math.min(2048, Math.max(256, requested))
     : 1024
