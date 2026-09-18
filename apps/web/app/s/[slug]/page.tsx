@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { cache } from 'react'
-import MidnightLetter from '@/components/templates/midnight-letter/MidnightLetter'
+import { loadTemplate } from '@/components/templates/registry'
 import { daysTogether } from '@/lib/dates'
 import { getPageBySlug } from '@/lib/db'
 import { getBaseUrl, getBrandName } from '@/lib/env'
@@ -83,5 +83,7 @@ export default async function SurprisePage({ params }: RouteParams) {
 
   if (!isPublishedAndFresh(data)) notFound()
 
-  return <MidnightLetter data={data} />
+  const Template = await loadTemplate(data.page.template_slug)
+
+  return <Template data={data} />
 }

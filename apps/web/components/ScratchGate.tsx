@@ -8,6 +8,20 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 
+/**
+ * Colors used to paint the scratch cover. Every template passes its own palette
+ * so the cover matches the story behind it. Omitting it keeps the brass look.
+ */
+export type ScratchCover = {
+  from: string
+  mid: string
+  to: string
+  /** Mid-stop color of the diagonal foil sheen. */
+  sheen?: string
+  /** Hairline frame color. */
+  frame?: string
+}
+
 type ScratchGateProps = {
   onReveal?: () => void
   label?: string
@@ -17,11 +31,25 @@ type ScratchGateProps = {
   backdrop?: React.ReactNode
   /** 0..1 fraction of the card that must be scratched to auto-reveal. */
   threshold?: number
+  /** Palette for the scratch cover. Defaults to the midnight-letter brass. */
+  cover?: ScratchCover
+  eyebrow?: string
+  subHint?: string
 }
 
 const DEFAULT_LABEL = 'Tarjeta para raspar y revelar la sorpresa'
 const DEFAULT_HINT = 'Raspá acá'
 const DEFAULT_BUTTON = 'Revelar sin raspar'
+const DEFAULT_EYEBROW = 'Sorpresa bloqueada'
+const DEFAULT_SUB_HINT = 'Deslizá el dedo sobre la tarjeta'
+
+const DEFAULT_COVER: Required<ScratchCover> = {
+  from: '#1F1B16',
+  mid: '#12100E',
+  to: '#0B0B0C',
+  sheen: 'rgba(200, 162, 75, 0.14)',
+  frame: 'rgba(200, 162, 75, 0.35)',
+}
 
 export default function ScratchGate({
   onReveal,
@@ -30,6 +58,9 @@ export default function ScratchGate({
   revealButtonLabel = DEFAULT_BUTTON,
   backdrop,
   threshold = 0.55,
+  cover,
+  eyebrow = DEFAULT_EYEBROW,
+  subHint = DEFAULT_SUB_HINT,
 }: ScratchGateProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -56,35 +87,40 @@ export default function ScratchGate({
     window.setTimeout(() => onReveal?.(), 700)
   }, [onReveal])
 
-  const paintCover = useCallback((width: number, height: number) => {
-    const ctx = ctxRef.current
-    if (!ctx) return
-    ctx.save()
-    ctx.globalCompositeOperation = 'source-over'
+  const paintCover = useCallback(
+    (width: number, height: number) => {
+      const ctx = ctxRef.current
+      if (!ctx) return
+      const palette = cover ?? DEFAULT_COVER
+      ctx.save()
+      ctx.globalCompositeOperation = 'source-over'
 
-    const gradient = ctx.createLinearGradient(0, 0, width, height)
-    gradient.addColorStop(0, '#1F1B16')
-    gradient.addColorStop(0.5, '#12100E')
-    gradient.addColorStop(1, '#0B0B0C')
-    ctx.fillStyle = gradient
-    ctx.fillRect(0, 0, width, height)
+      const gradient = ctx.createLinearGradient(0, 0, width, height)
+      gradient.addColorStop(0, palette.from)
+      gradient.addColorStop(0.5, palette.mid)
+      gradient.addColorStop(1, palette.to)
+      ctx.fillStyle = gradient
+      ctx.fillRect(0, 0, width, height)
 
-    // Brass foil diagonal sheen.
-    const sheen = ctx.createLinearGradient(0, 0, width, height)
-    sheen.addColorStop(0, 'rgba(200, 162, 75, 0.00)')
-    sheen.addColorStop(0.48, 'rgba(200, 162, 75, 0.14)')
-    sheen.addColorStop(0.52, 'rgba(200, 162, 75, 0.14)')
-    sheen.addColorStop(1, 'rgba(200, 162, 75, 0.00)')
-    ctx.fillStyle = sheen
-    ctx.fillRect(0, 0, width, height)
+      // Foil diagonal sheen.
+      const sheenColor = palette.sheen ?? DEFAULT_COVER.sheen
+      const sheen = ctx.createLinearGradient(0, 0, width, height)
+      sheen.addColorStop(0, 'transparent')
+      sheen.addColorStop(0.48, sheenColor)
+      sheen.addColorStop(0.52, sheenColor)
+      sheen.addColorStop(1, 'transparent')
+      ctx.fillStyle = sheen
+      ctx.fillRect(0, 0, width, height)
 
-    // Hairline frame.
-    ctx.strokeStyle = 'rgba(200, 162, 75, 0.35)'
-    ctx.lineWidth = 1
-    ctx.strokeRect(12, 12, width - 24, height - 24)
+      // Hairline frame.
+      ctx.strokeStyle = palette.frame ?? DEFAULT_COVER.frame
+      ctx.lineWidth = 1
+      ctx.strokeRect(12, 12, width - 24, height - 24)
 
-    ctx.restore()
-  }, [])
+      ctx.restore()
+    },
+    [cover],
+  )
 
   const sampleRevealedFraction = useCallback((): number => {
     const canvas = canvasRef.current
@@ -288,12 +324,12 @@ export default function ScratchGate({
           revealed ? 'is-hidden' : ''
         }`}
       >
-        <span className="eyebrow mb-4">Sorpresa bloqueada</span>
+        <span className="eyebrow mb-4">{eyebrow}</span>
         <span className="font-display text-[clamp(2rem,9vw,4rem)] leading-none text-[var(--color-paper)]">
           {hint}
         </span>
         <span className="mt-4 max-w-xs font-mono text-xs uppercase tracking-[0.2em] text-[var(--color-text-muted)]">
-          Deslizá el dedo sobre la tarjeta
+          {subHint}
         </span>
       </div>
 
