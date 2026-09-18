@@ -15,6 +15,10 @@ export const DEFAULT_TEMPLATE_SLUG = 'midnight-letter'
 export const TEMPLATE_LOADERS: Record<string, TemplateLoader> = {
   'midnight-letter': () => import('./midnight-letter/MidnightLetter'),
   'neon-corazon': () => import('./neon-corazon/NeonCorazon'),
+  'paper-luxe': () => import('./paper-luxe/PaperLuxe'),
+  // PLAN §8.1 names this template `soft-luxe-paper`; the shipped slug is
+  // `paper-luxe`. Both resolve to the same component so older rows keep working.
+  'soft-luxe-paper': () => import('./paper-luxe/PaperLuxe'),
 }
 
 export function hasTemplate(slug: string | null | undefined): boolean {

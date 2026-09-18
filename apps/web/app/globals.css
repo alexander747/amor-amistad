@@ -548,6 +548,162 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* Paper Luxe — scoped template tokens (PLAN §8.1, F2)                  */
+/* A LIGHT theme: the `--color-*` names are re-declared inside           */
+/* `.paper-luxe`, so the template and its shared children (gate, share   */
+/* card, buttons) read cream/ink/copper. `--color-paper` becomes the ink */
+/* because every shared component uses it as the text color.             */
+/* ------------------------------------------------------------------ */
+.paper-luxe {
+  --color-bg: #faf7f0;
+  --color-surface: #f2efe9;
+  --color-paper: #1a1a1a;
+  --color-text: #1a1a1a;
+  --color-text-muted: #6b6259;
+  --color-accent: #a6785a;
+  --color-border: rgba(166, 120, 90, 0.28);
+
+  --pl-cream: #faf7f0;
+  --pl-ink: #1a1a1a;
+  --pl-taupe: #c8b7a6;
+  --pl-copper: #a6785a;
+  /* Darkened copper for small accent text: #A6785A is 3.6:1 on cream and only
+     AA-safe for large text, so 11px labels use this 6.3:1 tone instead. */
+  --pl-copper-ink: #7a5334;
+
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-paper-body, var(--font-body));
+  color-scheme: light;
+}
+
+.paper-luxe h1,
+.paper-luxe h2,
+.paper-luxe h3,
+.paper-luxe .font-display {
+  font-family: var(--font-paper-display, var(--font-display));
+  font-weight: 500;
+}
+
+.paper-luxe .eyebrow {
+  font-family: var(--font-paper-body, var(--font-body));
+  color: var(--pl-copper-ink);
+  font-weight: 500;
+  letter-spacing: 0.34em;
+}
+
+.paper-luxe .btn-brass {
+  background-color: var(--pl-ink);
+  border-color: var(--pl-ink);
+  color: var(--pl-cream);
+}
+
+.paper-luxe .btn-brass:hover {
+  background-color: #333333;
+  border-color: #333333;
+}
+
+.paper-luxe .btn-outline {
+  color: var(--pl-ink);
+  border-color: rgba(166, 120, 90, 0.5);
+}
+
+.paper-luxe .btn-outline:hover {
+  border-color: var(--pl-copper-ink);
+  color: var(--pl-copper-ink);
+}
+
+/* The scratch gate renders inside `.paper-luxe` and inherits the cream cover,
+   so `--color-paper` is already ink. The hint is large text (>= 3:1), which is
+   where copper is allowed. */
+.paper-luxe .fixed.inset-0.z-50 .font-display {
+  color: var(--pl-copper);
+}
+
+.pl-paper {
+  background-color: var(--color-bg);
+  background-image: radial-gradient(
+    rgba(26, 26, 26, 0.03) 0.5px,
+    transparent 0.5px
+  );
+  background-size: 5px 5px;
+}
+
+.pl-gate-backdrop {
+  background:
+    radial-gradient(120% 90% at 50% 12%, rgba(200, 183, 166, 0.5), transparent 62%),
+    var(--color-bg);
+}
+
+.pl-hero-glow {
+  background: radial-gradient(
+    110% 80% at 50% 40%,
+    rgba(200, 183, 166, 0.35),
+    transparent 66%
+  );
+}
+
+/* A mounted printed plate: cream mat, hairline border, very soft shadow. */
+.pl-plate {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  box-shadow: 0 22px 55px -44px rgba(26, 26, 26, 0.5);
+  overflow: hidden;
+}
+
+.pl-plate-mat {
+  padding: 0.7rem;
+}
+
+.pl-plate-caption {
+  padding: 0 0.9rem 0.95rem;
+}
+
+/* Container-relative like `display-fluid`, so the shared hero also scales
+   inside the landing's phone-sized preview. */
+.pl-display {
+  font-size: clamp(2rem, 12vw, 5rem);
+  font-size: clamp(2rem, 12cqw, 5rem);
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+}
+
+.pl-days {
+  font-size: clamp(3.25rem, 22vw, 9rem);
+  font-size: clamp(3.25rem, 22cqw, 9rem);
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.pl-reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition:
+    opacity 1100ms var(--ease-out),
+    transform 1100ms var(--ease-out);
+  will-change: opacity, transform;
+}
+
+.pl-reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* The landing previews the REAL template heroes inside a fixed-width
+   `.preview-screen`. Neon Corazón sizes its display with viewport units, so
+   inside the preview we re-express those two classes against the container to
+   keep the real render in frame. This only applies inside the preview. */
+.preview-screen .neon-display {
+  font-size: clamp(1.6rem, 13cqw, 2.2rem);
+}
+
+.preview-screen .neon-days {
+  font-size: clamp(2rem, 17cqw, 3rem);
+}
+
+/* ------------------------------------------------------------------ */
 /* Motion preferences — PLAN §3.8                                      */
 /* ------------------------------------------------------------------ */
 @media (prefers-reduced-motion: reduce) {
@@ -569,6 +725,11 @@
   .reveal-scale {
     opacity: 1;
     transform: rotate(var(--tilt, 0deg));
+  }
+
+  .pl-reveal {
+    opacity: 1;
+    transform: none;
   }
 
   /* Scroll-linked transforms are set inline by Motion; `!important` wins over

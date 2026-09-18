@@ -5,6 +5,10 @@ import { motion, useReducedMotion, useScroll, useTransform } from 'motion/react'
 import { useRef } from 'react'
 import CheckoutCta from '@/components/CheckoutCta'
 import LetterHero from '@/components/templates/midnight-letter/LetterHero'
+import { outfit, sora } from '@/components/templates/neon-corazon/fonts'
+import NeonHero from '@/components/templates/neon-corazon/NeonHero'
+import { cormorant, jost } from '@/components/templates/paper-luxe/fonts'
+import PaperHero from '@/components/templates/paper-luxe/PaperHero'
 import PhonePreview from './PhonePreview'
 import { CountUp, EASE_OUT, OutlineNumber, Reveal, SectionLabel } from './primitives'
 
@@ -54,36 +58,84 @@ type TemplateInfo = {
   slug: string
   name: string
   concept: string
-  status: 'Disponible' | 'Próximamente'
   fonts: string
-  palette?: string[]
 }
 
 const TEMPLATES: TemplateInfo[] = [
   {
     slug: 'midnight-letter',
     name: 'Midnight Letter',
-    concept: 'Editorial cinematográfico',
-    status: 'Disponible' as const,
+    concept: 'Editorial cinematográfico, oscuro y con brass.',
     fonts: 'Fraunces · Instrument Sans',
   },
   {
-    slug: 'soft-luxe-paper',
+    slug: 'paper-luxe',
     name: 'Paper Luxe',
-    concept: 'Lujo minimal en papel',
-    status: 'Próximamente' as const,
+    concept: 'Papelería fina: crema, tinta y cobre.',
     fonts: 'Cormorant Garamond · Jost',
-    palette: ['#FAF7F0', '#1A1A1A', '#C8B7A6', '#A6785A'],
   },
   {
     slug: 'neon-corazon',
     name: 'Neon Corazón',
-    concept: 'Wrapped vibrante',
-    status: 'Próximamente' as const,
+    concept: 'Wrapped vibrante, con gradientes neón.',
     fonts: 'Sora · Outfit',
-    palette: ['#120B1A', '#FF0099', '#7F00FF', '#00E5FF'],
   },
 ]
+
+/**
+ * Real, live preview for each template: the SAME hero component the surprise
+ * page renders, driven by demo data — no screenshots, no mockups. Each hero is
+ * wrapped in its own template scope so its palette and fonts apply. The neon
+ * hero sizes its display type with viewport units, so a scoped rule in
+ * globals.css re-expresses it against the preview container.
+ */
+function TemplatePreview({ slug }: { slug: string }) {
+  if (slug === 'paper-luxe') {
+    return (
+      <div
+        className={`paper-luxe flex h-[300px] flex-col justify-center ${cormorant.variable} ${jost.variable}`}
+      >
+        <PaperHero
+          names={DEMO_NAMES}
+          dateLabel={DEMO_DATE}
+          days={DEMO_DAYS}
+          className="h-auto min-h-0"
+          showScrollHint={false}
+        />
+      </div>
+    )
+  }
+
+  if (slug === 'neon-corazon') {
+    return (
+      <div
+        className={`neon-corazon flex h-[300px] flex-col justify-center ${sora.variable} ${outfit.variable}`}
+      >
+        <NeonHero
+          names={DEMO_NAMES}
+          dateLabel={DEMO_DATE}
+          days={DEMO_DAYS}
+          countDays={DEMO_DAYS}
+          className="h-auto min-h-0"
+          showScrollHint={false}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-[300px] flex-col justify-center">
+      <LetterHero
+        names={DEMO_NAMES}
+        dateLabel={DEMO_DATE}
+        days={DEMO_DAYS}
+        countDays={DEMO_DAYS}
+        className="h-auto min-h-0"
+        showScrollHint={false}
+      />
+    </div>
+  )
+}
 
 export function Nav({ brand, checkoutUrl }: { brand: string; checkoutUrl: string }) {
   return (
@@ -335,64 +387,21 @@ export function Templates() {
         </div>
 
         <div className="mt-16 grid gap-8 lg:grid-cols-3">
-          {/* Live template — real component, no fake screenshot. */}
-          <article className="group relative flex flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)]">
-            <div className="relative flex-1 overflow-hidden bg-[var(--color-bg)] px-6 pb-14 pt-10">
-              <div
-                aria-hidden="true"
-                className="preview-screen mx-auto w-full max-w-[270px] overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)]"
-              >
-                <div className="flex h-[300px] flex-col justify-center">
-                  <LetterHero
-                    names={DEMO_NAMES}
-                    dateLabel={DEMO_DATE}
-                    days={DEMO_DAYS}
-                    countDays={DEMO_DAYS}
-                    className="h-auto min-h-0"
-                    showScrollHint={false}
-                  />
-                </div>
-              </div>
-              <span className="absolute left-6 top-6 rounded-full border border-[var(--color-accent)] px-3 py-1 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--color-accent)]">
-                Disponible
-              </span>
-            </div>
-            <div className="border-t border-[var(--color-border)] px-6 py-6">
-              <h3 className="font-display text-2xl text-[var(--color-paper)]">
-                Midnight Letter
-              </h3>
-              <p className="mt-2 text-sm text-[var(--color-text-muted)]">
-                Editorial cinematográfico, oscuro y con brass.
-              </p>
-              <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--color-text-muted)]">
-                Fraunces · Instrument Sans
-              </p>
-            </div>
-          </article>
-
-          {TEMPLATES.slice(1).map((template) => (
+          {TEMPLATES.map((template) => (
             <article
               key={template.slug}
-              className="flex flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)]"
+              className="group relative flex flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)]"
             >
-              <div className="relative flex flex-1 flex-col justify-between gap-8 px-6 py-10">
-                <span className="self-start rounded-full border border-[var(--color-border)] px-3 py-1 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--color-text-muted)]">
-                  Próximamente
-                </span>
-                <div>
-                  <div aria-hidden="true" className="flex gap-2">
-                    {template.palette?.map((color) => (
-                      <span
-                        key={color}
-                        className="h-10 flex-1 rounded-[var(--radius-sm)] border border-[var(--color-border)]"
-                        style={{ backgroundColor: color }}
-                      />
-                    ))}
-                  </div>
-                  <p className="mt-6 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--color-text-muted)]">
-                    {template.fonts}
-                  </p>
+              <div className="relative flex-1 overflow-hidden bg-[var(--color-bg)] px-6 pb-14 pt-10">
+                <div
+                  aria-hidden="true"
+                  className="preview-screen mx-auto w-full max-w-[270px] overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border)]"
+                >
+                  <TemplatePreview slug={template.slug} />
                 </div>
+                <span className="absolute left-6 top-6 rounded-full border border-[var(--color-accent)] px-3 py-1 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--color-accent)]">
+                  Disponible
+                </span>
               </div>
               <div className="border-t border-[var(--color-border)] px-6 py-6">
                 <h3 className="font-display text-2xl text-[var(--color-paper)]">
@@ -400,6 +409,9 @@ export function Templates() {
                 </h3>
                 <p className="mt-2 text-sm text-[var(--color-text-muted)]">
                   {template.concept}
+                </p>
+                <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--color-text-muted)]">
+                  {template.fonts}
                 </p>
               </div>
             </article>

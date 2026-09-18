@@ -1,0 +1,6 @@
+export { default as PaperLuxe } from './PaperLuxe'
+export { default as PaperHero } from './PaperHero'
+export { default as PaperGallery } from './PaperGallery'
+export { default as PaperMessages } from './PaperMessages'
+export { default as PaperClosing } from './PaperClosing'
+export { default as Reveal } from './Reveal'
