@@ -331,7 +331,8 @@
     },
     {
       "parameters": {
-        "jsCode": "\n// TODO(qr): node-qrcode (\"qrcode\" on npm) is NOT bundled with n8n. Either:\n//   1) docker exec posfinal-n8n npm install qrcode\n//      and set NODE_FUNCTION_ALLOW_EXTERNAL=qrcode, or\n//   2) replace this node with an HTTP Request to a QR generation service.\nlet qrDataUrl = '';\nlet publicUrl = '';\ntry {\n  const QRCode = require('qrcode');\n  const base = String($env.NEXT_PUBLIC_BASE_URL || 'https://amor.uniongloss.com');\n  const trimmed = base.charAt(base.length - 1) === '/' ? base.slice(0, -1) : base;\n  const slug = $('Insert Page').item.json.slug || '';\n  publicUrl = trimmed + '/s/' + slug;\n  qrDataUrl = await QRCode.toDataURL(publicUrl, { errorCorrectionLevel: 'H', margin: 4, width: 1024 });\n} catch (error) {\n  throw new Error('QR generation unavailable: ' + error.message + ' (install qrcode, see TODO)');\n}\nreturn [{ json: { publicUrl: publicUrl, qrDataUrl: qrDataUrl, qrBase64: qrDataUrl.split(',')[1] || '' } }];\n"
+        "jsCode": "// El QR lo genera la app Next.js en /api/qr/<slug> (error correction H, margin 4).\n// Antes esto usaba require('qrcode'), que NO viene con n8n y exigía\n// NODE_FUNCTION_ALLOW_EXTERNAL. Así no hay que instalar nada en el n8n compartido.\n// El email lo consume igual: mantiene el nombre de campo `qrDataUrl`.\nconst base = String($env.NEXT_PUBLIC_BASE_URL || 'https://amor.uniongloss.com').replace(/\\/+$/, '');\nconst slug = $('Insert Page').item.json.slug || '';\nconst publicUrl = base + '/s/' + slug;\nconst qrDataUrl = base + '/api/qr/' + slug;\nreturn [{ json: { publicUrl: publicUrl, qrDataUrl: qrDataUrl } }];\n",
+        "notes": "El QR lo genera la app en /api/qr/<slug> (H, margin 4). Sin módulos externos en n8n."
       },
       "id": "ed2db1d7-ad06-42b0-b5c6-80aa819a95bf",
       "name": "Generate QR",
